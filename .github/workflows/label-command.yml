@@ -48,6 +48,8 @@ jobs:
     steps:
       - name: Get base ref
         id: base_ref
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           PR_URL="$(jq -r '.issue.pull_request.html_url' "${GITHUB_EVENT_PATH}")"
           REF="$(gh pr view "${PR_URL}" --json baseRefName --jq .baseRefName)"
