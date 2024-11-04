@@ -1,4 +1,4 @@
-name: Controll PR labels using action comments
+name: Handle PR comments
 
 on:
   issue_comment:
@@ -6,9 +6,9 @@ on:
   workflow_call:
 
 jobs:
-  skip-test-labeler:
+  test-skip:
     # This job adds skip test labels to PRs for allowed tests
-    if: ${{ github.event.issue.pull_request }}
+    if: ${{ github.event.issue.pull_request && startsWith(github.event.comment.body, '/test skip') }}
     runs-on: [ubuntu-latest]
     steps:
       - name: Skip check_pruned_graph test
@@ -17,8 +17,8 @@ jobs:
         with:
           labels: tests/skips/check_pruned_graph
 
-  trigger-pipeline:
-    if: ${{ github.event.issue.pull_request }}
+  pipeline-restart:
+    if: ${{ github.event.issue.pull_request && startsWith(github.event.comment.body, '/pipeline restart') }}
     runs-on: [ubuntu-latest]
     steps:
       - name: Trigger isv hosted pipeline
@@ -68,10 +68,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -x
-
           authorization() {
             echo "AUTHORIZED=$1" >>"${GITHUB_OUTPUT}"
+            echo "Authorized: $1"
             exit 0
           }
 
