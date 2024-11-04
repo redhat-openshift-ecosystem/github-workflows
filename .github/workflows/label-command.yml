@@ -93,4 +93,6 @@ jobs:
         uses: actions-ecosystem/action-add-labels@v1
         if: ${{ steps.authorized.outputs.AUTHORIZED == 'true' }}
         with:
-          labels: approved
+          labels: |
+            approved
+            pipeline/trigger-hosted
