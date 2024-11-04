@@ -46,16 +46,17 @@ jobs:
     if: ${{ github.event.issue.pull_request && startsWith(github.event.comment.body, '/approve') && !contains(github.event.issue.labels.*.name, 'approved') }}
     runs-on: [ubuntu-latest]
     steps:
-      - name: Dump GitHub context
-        env:
-          GITHUB_CONTEXT: ${{ toJson(github) }}
+      - name: Get base ref
+        id: base_ref
         run: |
-          echo "$GITHUB_CONTEXT"
+          PR_URL="$(jq -r '.issue.pull_request.html_url' "${GITHUB_EVENT_PATH}")"
+          REF="$(gh pr view "${PR_URL}" --json baseRefName --jq .baseRefName)"
+          echo "BASE_REF=${REF}" >>"${GITHUB_OUTPUT}"
 
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.ref }}
+          ref: ${{ steps.base_ref.outputs.BASE_REF }}
           fetch-depth: 1
           sparse-checkout: |
             operators
