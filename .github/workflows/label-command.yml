@@ -43,7 +43,7 @@ jobs:
           labels: pipeline/trigger-release
 
   approve:
-    if: ${{ github.event.issue.pull_request && github.event.repository.name.startsWith("community-") && github.event.issue.state == 'open' && startsWith(github.event.comment.body, '/approve') }}
+    if: ${{ github.event.issue.pull_request && startsWith(github.event.repository.name, 'community-') && github.event.issue.state == 'open' && startsWith(github.event.comment.body, '/approve') }}
     runs-on: [ubuntu-latest]
     steps:
       - name: Get base ref
