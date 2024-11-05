@@ -43,7 +43,7 @@ jobs:
           labels: pipeline/trigger-release
 
   approve:
-    if: ${{ github.event.issue.pull_request && startsWith(github.event.comment.body, '/approve') && !contains(github.event.issue.labels.*.name, 'approved') }}
+    if: ${{ github.event.issue.pull_request && github.event.repository.name.startsWith("community-") && github.event.issue.state == 'open' && startsWith(github.event.comment.body, '/approve') }}
     runs-on: [ubuntu-latest]
     steps:
       - name: Get base ref
@@ -89,10 +89,15 @@ jobs:
           done
           authorization true
 
-      - name: Apply label
+      - name: Apply approved label
         uses: actions-ecosystem/action-add-labels@v1
-        if: ${{ steps.authorized.outputs.AUTHORIZED == 'true' }}
+        if: ${{ steps.authorized.outputs.AUTHORIZED == 'true'  && !contains(github.event.issue.labels.*.name, 'approved') }}
         with:
-          labels: |
-            approved
-            pipeline/trigger-hosted
+          labels: approved
+
+      - name: Apply trigger label
+        uses: actions-ecosystem/action-add-labels@v1
+        # Only trigger a pipeline run if the pipeline is not already running
+        if: ${{ steps.authorized.outputs.AUTHORIZED == 'true'  && !contains(github.event.issue.labels.*.name, 'operator-hosted-pipeline/started') }}
+        with:
+          labels: pipeline/trigger-hosted
