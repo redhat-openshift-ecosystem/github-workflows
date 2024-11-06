@@ -1,44 +1,94 @@
-name: Controll PR labels using action comments
+name: Handle PR comments
 
 on:
   issue_comment:
     types: [created, edited]
   workflow_call:
 
-
 jobs:
-  skip-test-labeler:
+  test-skip:
     # This job adds skip test labels to PRs for allowed tests
-    if: ${{ github.event.issue.pull_request }}
+    if: ${{ github.event.issue.pull_request && startsWith(github.event.comment.body, '/test skip') }}
     runs-on: [ubuntu-latest]
     steps:
-    - name: Skip check_pruned_graph test
-      uses: actions-ecosystem/action-add-labels@v1
-      if: ${{ startsWith(github.event.comment.body, '/test skip check_pruned_graph') }}
-      with:
-        labels: tests/skips/check_pruned_graph
+      - name: Skip check_pruned_graph test
+        uses: actions-ecosystem/action-add-labels@v1
+        if: ${{ startsWith(github.event.comment.body, '/test skip check_pruned_graph') }}
+        with:
+          labels: tests/skips/check_pruned_graph
 
-  trigger-pipeline:
-    if: ${{ github.event.issue.pull_request }}
+  pipeline-restart:
+    if: ${{ github.event.issue.pull_request && startsWith(github.event.comment.body, '/pipeline restart') }}
     runs-on: [ubuntu-latest]
     steps:
-    - name: Trigger isv hosted pipeline
-      if: ${{ startsWith(github.event.comment.body, '/pipeline restart operator-hosted-pipeline')  && contains( github.event.issue.labels.*.name, 'operator-hosted-pipeline/failed') }}
-      uses: actions-ecosystem/action-add-labels@v1
-      with:
-        labels: pipeline/trigger-hosted
-    - name: Trigger isv release pipeline
-      if: ${{ startsWith(github.event.comment.body, '/pipeline restart operator-release-pipeline')  && contains( github.event.issue.labels.*.name, 'operator-release-pipeline/failed') }}
-      uses: actions-ecosystem/action-add-labels@v1
-      with:
-        labels: pipeline/trigger-release
-    - name: Trigger community hosted pipeline
-      if: ${{ startsWith(github.event.comment.body, '/pipeline restart community-hosted-pipeline')  && contains( github.event.issue.labels.*.name, 'community-hosted-pipeline/failed') }}
-      uses: actions-ecosystem/action-add-labels@v1
-      with:
-        labels: pipeline/trigger-hosted
-    - name: Trigger community release pipeline
-      if: ${{ startsWith(github.event.comment.body, '/pipeline restart community-release-pipeline')  && contains( github.event.issue.labels.*.name, 'community-release-pipeline/failed') }}
-      uses: actions-ecosystem/action-add-labels@v1
-      with:
-        labels: pipeline/trigger-release
+      - name: Trigger isv hosted pipeline
+        if: ${{ startsWith(github.event.comment.body, '/pipeline restart operator-hosted-pipeline') && contains(github.event.issue.labels.*.name, 'operator-hosted-pipeline/failed') }}
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          labels: pipeline/trigger-hosted
+
+      - name: Trigger isv release pipeline
+        if: ${{ startsWith(github.event.comment.body, '/pipeline restart operator-release-pipeline') && contains(github.event.issue.labels.*.name, 'operator-release-pipeline/failed') }}
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          labels: pipeline/trigger-release
+
+  approve:
+    if: ${{ github.event.issue.pull_request && startsWith(github.event.repository.name, 'community-') && github.event.issue.state == 'open' && startsWith(github.event.comment.body, '/approve') }}
+    runs-on: [ubuntu-latest]
+    steps:
+      - name: Get base ref
+        id: base_ref
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR_URL="$(jq -r '.issue.pull_request.html_url' "${GITHUB_EVENT_PATH}")"
+          REF="$(gh pr view "${PR_URL}" --json baseRefName --jq .baseRefName)"
+          echo "BASE_REF=${REF}" >>"${GITHUB_OUTPUT}"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.base_ref.outputs.BASE_REF }}
+          fetch-depth: 1
+          sparse-checkout: |
+            operators
+
+      - name: Check permission
+        id: authorized
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          authorization() {
+            echo "AUTHORIZED=$1" >>"${GITHUB_OUTPUT}"
+            echo "Authorized: $1"
+            exit 0
+          }
+
+          PR_URL="$(jq -r '.issue.pull_request.html_url' "${GITHUB_EVENT_PATH}")"
+          COMMENT_AUTHOR="$(jq -r '.comment.user.login' "${GITHUB_EVENT_PATH}")"
+          mapfile -t AFFECTED_OPERATORS < <(
+            gh pr diff "${PR_URL}" --name-only |
+            awk -F/ '$1=="operators"&&NF>2{operators[$2]=1} $1=="catalogs"&&NF>3{operators[$3]=1} END{for (o in operators) print o}'
+          )
+          AFFECTED_OPERATORS_COUNT="${#AFFECTED_OPERATORS[*]}"
+          [ "${AFFECTED_OPERATORS_COUNT}" -gt 0 ] || authorization false
+          for operator in "${AFFECTED_OPERATORS[@]}"; do
+            ci_yaml="operators/${operator}/ci.yaml"
+            [ -f "${ci_yaml}" ] || authorization false
+            yq -r '.reviewers[]' "${ci_yaml}" | grep -Fqx "${COMMENT_AUTHOR}" || authorization false
+          done
+          authorization true
+
+      - name: Apply approved label
+        uses: actions-ecosystem/action-add-labels@v1
+        if: ${{ steps.authorized.outputs.AUTHORIZED == 'true'  && !contains(github.event.issue.labels.*.name, 'approved') }}
+        with:
+          labels: approved
+
+      - name: Apply trigger label
+        uses: actions-ecosystem/action-add-labels@v1
+        # Only trigger a pipeline run if the pipeline is not already running
+        if: ${{ steps.authorized.outputs.AUTHORIZED == 'true'  && !contains(github.event.issue.labels.*.name, 'operator-hosted-pipeline/started') }}
+        with:
+          labels: pipeline/trigger-hosted
