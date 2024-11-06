@@ -26,18 +26,9 @@ jobs:
         uses: actions-ecosystem/action-add-labels@v1
         with:
           labels: pipeline/trigger-hosted
+
       - name: Trigger isv release pipeline
         if: ${{ startsWith(github.event.comment.body, '/pipeline restart operator-release-pipeline') && contains(github.event.issue.labels.*.name, 'operator-release-pipeline/failed') }}
-        uses: actions-ecosystem/action-add-labels@v1
-        with:
-          labels: pipeline/trigger-release
-      - name: Trigger community hosted pipeline
-        if: ${{ startsWith(github.event.comment.body, '/pipeline restart community-hosted-pipeline') && contains(github.event.issue.labels.*.name, 'community-hosted-pipeline/failed') }}
-        uses: actions-ecosystem/action-add-labels@v1
-        with:
-          labels: pipeline/trigger-hosted
-      - name: Trigger community release pipeline
-        if: ${{ startsWith(github.event.comment.body, '/pipeline restart community-release-pipeline') && contains(github.event.issue.labels.*.name, 'community-release-pipeline/failed') }}
         uses: actions-ecosystem/action-add-labels@v1
         with:
           labels: pipeline/trigger-release
