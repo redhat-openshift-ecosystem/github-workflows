@@ -3,6 +3,8 @@ name: Handle PR comments
 on:
   issue_comment:
     types: [created, edited]
+  pull_request_review:
+    types: [submitted]
   workflow_call:
 
 jobs:
@@ -34,15 +36,39 @@ jobs:
           labels: pipeline/trigger-release
 
   approve:
-    if: ${{ github.event.issue.pull_request && startsWith(github.event.repository.name, 'community-') && github.event.issue.state == 'open' && startsWith(github.event.comment.body, '/approve') }}
+    if: |
+      startsWith(github.event.repository.name, 'community-') &&
+      (
+        (github.event_name == 'issue_comment' && github.event.issue.pull_request && github.event.issue.state == 'open' && startsWith(github.event.comment.body, '/approve')) ||
+        (github.event_name == 'pull_request_review' && github.event.pull_request.state == 'open' && startsWith(github.event.review.body, '/approve'))
+      )
     runs-on: [ubuntu-latest]
     steps:
+      - name: Normalize event data
+        id: event_data
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "${EVENT_NAME}" = "issue_comment" ]; then
+            PR_URL="$(jq -r '.issue.pull_request.html_url' "${GITHUB_EVENT_PATH}")"
+            COMMENT_AUTHOR="$(jq -r '.comment.user.login' "${GITHUB_EVENT_PATH}")"
+            ISSUE_NUMBER="${{ github.event.issue.number }}"
+          else
+            PR_URL="$(jq -r '.pull_request.html_url' "${GITHUB_EVENT_PATH}")"
+            COMMENT_AUTHOR="$(jq -r '.review.user.login' "${GITHUB_EVENT_PATH}")"
+            ISSUE_NUMBER="${{ github.event.pull_request.number }}"
+          fi
+          echo "pr_url=${PR_URL}" >> $GITHUB_OUTPUT
+          echo "comment_author=${COMMENT_AUTHOR}" >> $GITHUB_OUTPUT
+          echo "issue_number=${ISSUE_NUMBER}" >> $GITHUB_OUTPUT
+
       - name: Get base ref
         id: base_ref
         env:
           GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ steps.event_data.outputs.pr_url }}
         run: |
-          PR_URL="$(jq -r '.issue.pull_request.html_url' "${GITHUB_EVENT_PATH}")"
           REF="$(gh pr view "${PR_URL}" --json baseRefName --jq .baseRefName)"
           echo "BASE_REF=${REF}" >>"${GITHUB_OUTPUT}"
 
@@ -58,15 +84,14 @@ jobs:
         id: authorized
         env:
           GH_TOKEN: ${{ github.token }}
+          PR_URL: ${{ steps.event_data.outputs.pr_url }}
+          COMMENT_AUTHOR: ${{ steps.event_data.outputs.comment_author }}
         run: |
           authorization() {
             echo "AUTHORIZED=$1" >>"${GITHUB_OUTPUT}"
             echo "Authorized: $1"
             exit 0
           }
-
-          PR_URL="$(jq -r '.issue.pull_request.html_url' "${GITHUB_EVENT_PATH}")"
-          COMMENT_AUTHOR="$(jq -r '.comment.user.login' "${GITHUB_EVENT_PATH}")"
           mapfile -t AFFECTED_OPERATORS < <(
             gh pr diff "${PR_URL}" --name-only |
             awk -F/ '$1=="operators"&&NF>2{operators[$2]=1} $1=="catalogs"&&NF>3{operators[$3]=1} END{for (o in operators) print o}'
@@ -82,7 +107,12 @@ jobs:
 
       - name: Apply approved label
         uses: actions-ecosystem/action-add-labels@v1
-        if: ${{ steps.authorized.outputs.AUTHORIZED == 'true'  && !contains(github.event.issue.labels.*.name, 'approved') }}
+        if: |
+          steps.authorized.outputs.AUTHORIZED == 'true' &&
+          (
+            (github.event_name == 'issue_comment' && !contains(github.event.issue.labels.*.name, 'approved')) ||
+            (github.event_name == 'pull_request_review' && !contains(github.event.pull_request.labels.*.name, 'approved'))
+          )
         with:
           labels: approved
 
