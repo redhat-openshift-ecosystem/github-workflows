@@ -37,11 +37,8 @@ jobs:
 
   approve:
     if: |
-      startsWith(github.event.repository.name, 'community-') &&
-      (
-        (github.event_name == 'issue_comment' && github.event.issue.pull_request && github.event.issue.state == 'open' && startsWith(github.event.comment.body, '/approve')) ||
-        (github.event_name == 'pull_request_review' && github.event.pull_request.state == 'open' && startsWith(github.event.review.body, '/approve'))
-      )
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request && github.event.issue.state == 'open' && startsWith(github.event.comment.body, '/approve')) ||
+      (github.event_name == 'pull_request_review' && github.event.pull_request.state == 'open' && startsWith(github.event.review.body, '/approve'))
     runs-on: [ubuntu-latest]
     steps:
       - name: Normalize event data
@@ -98,12 +95,25 @@ jobs:
           )
           AFFECTED_OPERATORS_COUNT="${#AFFECTED_OPERATORS[*]}"
           [ "${AFFECTED_OPERATORS_COUNT}" -gt 0 ] || authorization false
+
+          # Check ci.yaml reviewers (community operators)
+          CI_YAML_AUTHORIZED=true
           for operator in "${AFFECTED_OPERATORS[@]}"; do
             ci_yaml="operators/${operator}/ci.yaml"
-            [ -f "${ci_yaml}" ] || authorization false
-            yq -r '.reviewers[]' "${ci_yaml}" | grep -Fqx "${COMMENT_AUTHOR}" || authorization false
+            if [ -f "${ci_yaml}" ] && yq -r '.reviewers[]' "${ci_yaml}" 2>/dev/null | grep -Fqx "${COMMENT_AUTHOR}"; then
+              continue
+            fi
+            CI_YAML_AUTHORIZED=false
+            break
           done
-          authorization true
+          [ "${CI_YAML_AUTHORIZED}" = "true" ] && authorization true
+
+          # Fallback: check if commenter is a requested reviewer on the PR
+          if gh pr view "${PR_URL}" --json reviewRequests --jq '.reviewRequests[].login' | grep -Fqx "${COMMENT_AUTHOR}"; then
+            authorization true
+          fi
+
+          authorization false
 
       - name: Apply approved label
         uses: actions-ecosystem/action-add-labels@v1
