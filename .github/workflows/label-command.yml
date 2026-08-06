@@ -14,7 +14,7 @@ jobs:
     runs-on: [ubuntu-latest]
     steps:
       - name: Skip check_pruned_graph test
-        uses: actions-ecosystem/action-add-labels@v1
+        uses: actions-ecosystem/action-add-labels@bd52874380e3909a1ac983768df6976535ece7f8  # v1.1.0
         if: ${{ startsWith(github.event.comment.body, '/test skip check_pruned_graph') }}
         with:
           labels: tests/skips/check_pruned_graph
@@ -25,13 +25,13 @@ jobs:
     steps:
       - name: Trigger isv hosted pipeline
         if: ${{ startsWith(github.event.comment.body, '/pipeline restart operator-hosted-pipeline') && contains(github.event.issue.labels.*.name, 'operator-hosted-pipeline/failed') }}
-        uses: actions-ecosystem/action-add-labels@v1
+        uses: actions-ecosystem/action-add-labels@bd52874380e3909a1ac983768df6976535ece7f8  # v1.1.0
         with:
           labels: pipeline/trigger-hosted
 
       - name: Trigger isv release pipeline
         if: ${{ startsWith(github.event.comment.body, '/pipeline restart operator-release-pipeline') && contains(github.event.issue.labels.*.name, 'operator-release-pipeline/failed') }}
-        uses: actions-ecosystem/action-add-labels@v1
+        uses: actions-ecosystem/action-add-labels@bd52874380e3909a1ac983768df6976535ece7f8  # v1.1.0
         with:
           labels: pipeline/trigger-release
 
@@ -73,7 +73,7 @@ jobs:
           echo "BASE_REF=${REF}" >>"${GITHUB_OUTPUT}"
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: ${{ steps.base_ref.outputs.BASE_REF }}
           fetch-depth: 1
@@ -106,7 +106,7 @@ jobs:
           authorization true
 
       - name: Apply approved label
-        uses: actions-ecosystem/action-add-labels@v1
+        uses: actions-ecosystem/action-add-labels@bd52874380e3909a1ac983768df6976535ece7f8  # v1.1.0
         if: |
           steps.authorized.outputs.AUTHORIZED == 'true' &&
           (
@@ -117,7 +117,7 @@ jobs:
           labels: approved
 
       - name: Apply trigger label
-        uses: actions-ecosystem/action-add-labels@v1
+        uses: actions-ecosystem/action-add-labels@bd52874380e3909a1ac983768df6976535ece7f8  # v1.1.0
         # Only trigger a pipeline run if the pipeline is not already running
         if: ${{ steps.authorized.outputs.AUTHORIZED == 'true'  && !contains(github.event.issue.labels.*.name, 'operator-hosted-pipeline/started') }}
         with:
