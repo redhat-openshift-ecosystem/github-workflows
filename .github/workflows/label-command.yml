@@ -7,6 +7,10 @@ on:
     types: [submitted]
   workflow_call:
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   test-skip:
     # This job adds skip test labels to PRs for allowed tests
